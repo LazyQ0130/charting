@@ -320,7 +320,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <Box className="w-6 h-6 text-blue-500" />
                 GeoTech View
             </h1>
-            <p className="text-xs text-slate-500 mt-1">工程制图视角训练</p>
+            <p className="text-sm text-slate-600 mt-1">简易3D建模</p>
+            <p className="text-[10px] text-slate-400 mt-1 font-mono">Designed by QYF-NJUPT</p>
         </div>
 
         {isBuilderMode ? renderBuilderControls() : (

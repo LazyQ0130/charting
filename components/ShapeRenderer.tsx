@@ -114,6 +114,7 @@ const PartRenderer: React.FC<{
         <TransformControls 
           object={meshRef} 
           mode={transformMode}
+          space="local" // Use local space so handles align with rotated parent group (Z-up)
           // Important: Capture the exact mesh properties on drag end
           onMouseUp={() => {
             if (meshRef.current) {
