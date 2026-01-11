@@ -24,7 +24,6 @@ const SaveModal = ({
     const [selectedCategory, setSelectedCategory] = useState(categories[0]?.name || '我的收藏');
     const [newCategoryName, setNewCategoryName] = useState('');
 
-    // Update selected category default when categories change or modal opens
     useEffect(() => {
         if (isOpen && categories.length > 0) {
             setSelectedCategory(categories[0].name);
@@ -126,10 +125,8 @@ const EMPTY_SHAPE: ShapeDefinition = {
 };
 
 const App: React.FC = () => {
-  // Navigation State
   const [categories, setCategories] = useState<Category[]>(SHAPE_CATEGORIES);
   
-  // Initialize active shape safely
   const initialShape = useMemo(() => {
       for (const cat of SHAPE_CATEGORIES) {
           if (cat.shapes.length > 0) return cat.shapes[0];
@@ -142,46 +139,39 @@ const App: React.FC = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isSaveModalOpen, setSaveModalOpen] = useState(false);
 
-  // Builder Mode State
   const [isBuilderMode, setIsBuilderMode] = useState(false);
   const [customParts, setCustomParts] = useState<GeometryPart[]>([]);
   const [selectedPartIndices, setSelectedPartIndices] = useState<number[]>([]);
 
-  // Undo/Redo History Stacks
   const [history, setHistory] = useState<GeometryPart[][]>([]);
   const [future, setFuture] = useState<GeometryPart[][]>([]);
 
-  // Helper to record history before making a change
   const pushToHistory = () => {
     setHistory((prev) => [...prev, customParts]);
-    setFuture([]); // Clear future on new action
+    setFuture([]); 
   };
 
   const handleUndo = () => {
     if (history.length === 0) return;
     const previous = history[history.length - 1];
     const newHistory = history.slice(0, -1);
-    
     setFuture((prev) => [customParts, ...prev]);
     setCustomParts(previous);
     setHistory(newHistory);
-    setSelectedPartIndices([]); // Clear selection to avoid index errors
+    setSelectedPartIndices([]); 
   };
 
   const handleRedo = () => {
     if (future.length === 0) return;
     const next = future[0];
     const newFuture = future.slice(1);
-
     setHistory((prev) => [...prev, customParts]);
     setCustomParts(next);
     setFuture(newFuture);
     setSelectedPartIndices([]);
   };
 
-  // Manage Gallery Logic
   const handleDeleteShape = (categoryId: string, shapeId: string) => {
-     // Create a new categories array with the target shape filtered out
      const newCategories = categories.map(cat => {
          if (cat.id !== categoryId) return cat;
          return {
@@ -189,25 +179,18 @@ const App: React.FC = () => {
              shapes: cat.shapes.filter(s => s.id !== shapeId)
          };
      });
-     
      setCategories(newCategories);
-
-     // If the deleted shape was the currently active one
      if (activeShape && activeShape.id === shapeId) {
          let foundShape: ShapeDefinition | undefined;
-         
-         // Try to find the first available shape in the new list
          for (const cat of newCategories) {
              if (cat.shapes.length > 0) {
                  foundShape = cat.shapes[0];
                  break;
              }
          }
-         
          if (foundShape) {
              setActiveShape(foundShape);
          } else {
-             // Fallback if gallery is completely empty
              setActiveShape(EMPTY_SHAPE);
          }
      }
@@ -222,13 +205,11 @@ const App: React.FC = () => {
           id: `custom-${Date.now()}`,
           name: name,
           description: '用户自定义创建的组合体。',
-          parts: JSON.parse(JSON.stringify(customParts)) // Deep copy
+          parts: JSON.parse(JSON.stringify(customParts))
       };
 
       setCategories(prev => {
-          // Check if category exists by Name
           const existingCatIndex = prev.findIndex(c => c.name === categoryName);
-          
           if (existingCatIndex >= 0) {
               const newCats = [...prev];
               const targetCat = newCats[existingCatIndex];
@@ -238,7 +219,6 @@ const App: React.FC = () => {
               };
               return newCats;
           } else {
-              // Create new category
               return [...prev, {
                   id: `cat-${Date.now()}`,
                   name: categoryName,
@@ -253,7 +233,6 @@ const App: React.FC = () => {
       alert("保存成功！");
   };
 
-  // Construct the "Active Shape" object dynamically if in builder mode
   const currentRenderShape: ShapeDefinition = useMemo(() => {
     if (isBuilderMode) {
       return {
@@ -272,12 +251,12 @@ const App: React.FC = () => {
     const newPart: GeometryPart = {
         type,
         position: [0, 0, 0],
-        scale: type === PrimitiveType.BOX ? [2, 2, 2] : [1, 2, 1],
+        scale: type === PrimitiveType.BOX ? [2, 2, 2] : [2, 2, 2], // Default bigger start size
         rotation: [0, 0, 0],
         color: '#60a5fa'
     };
     setCustomParts([...customParts, newPart]);
-    setSelectedPartIndices([customParts.length]); // Select new
+    setSelectedPartIndices([customParts.length]); 
   };
 
   const handleUpdatePart = (index: number, updatedPart: GeometryPart) => {
@@ -289,7 +268,6 @@ const App: React.FC = () => {
 
   const handleRemovePart = (index: number) => {
       pushToHistory();
-      // Logic when removing item: update indices list
       const newParts = customParts.filter((_, i) => i !== index);
       setCustomParts(newParts);
       setSelectedPartIndices([]);
@@ -297,7 +275,6 @@ const App: React.FC = () => {
 
   const handlePartClick = (index: number, multiSelect: boolean) => {
       if (index === -1) {
-          // Clicked background
           setSelectedPartIndices([]);
           return;
       }
@@ -316,15 +293,15 @@ const App: React.FC = () => {
   const createBrushFromPart = (part: GeometryPart): Brush => {
       let geo: THREE.BufferGeometry;
       
-      // Re-create geometry based on type
+      // Re-create geometry based on type (Using UNIT SIZES to match ShapeRenderer)
       if (part.type === PrimitiveType.BOX) {
-          geo = new THREE.BoxGeometry(...part.scale);
+          geo = new THREE.BoxGeometry(1, 1, 1);
       } else if (part.type === PrimitiveType.CYLINDER) {
-          geo = new THREE.CylinderGeometry(part.scale[0], part.scale[0], part.scale[1], 32);
+          geo = new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
       } else if (part.type === PrimitiveType.WEDGE) {
-           geo = new THREE.CylinderGeometry(part.scale[0], part.scale[0], part.scale[1], 3);
+           geo = new THREE.CylinderGeometry(0.5, 0.5, 1, 3);
       } else if (part.type === PrimitiveType.CONE) {
-           geo = new THREE.ConeGeometry(part.scale[0], part.scale[1], 4);
+           geo = new THREE.ConeGeometry(0.5, 1, 32);
       } else if (part.type === PrimitiveType.CUSTOM && part.geometryData) {
            geo = new THREE.BufferGeometryLoader().parse(part.geometryData);
       } else {
@@ -334,6 +311,8 @@ const App: React.FC = () => {
       const brush = new Brush(geo);
       brush.position.set(...part.position);
       if (part.rotation) brush.rotation.set(...part.rotation);
+      // Important: Apply the scale to the Brush logic
+      brush.scale.set(...part.scale);
       
       brush.updateMatrixWorld();
       return brush;
@@ -402,7 +381,6 @@ const App: React.FC = () => {
         onSelectPart={setSelectedPartIndices}
         onBooleanOperation={handleBooleanOperation}
         
-        // Pass Undo/Redo Props
         onUndo={handleUndo}
         onRedo={handleRedo}
         canUndo={history.length > 0}

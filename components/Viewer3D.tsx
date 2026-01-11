@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { CameraControls, Grid, Center, Environment } from '@react-three/drei';
 import ShapeRenderer, { TransformMode } from './ShapeRenderer';
 import { GeometryPart, ShapeDefinition, ViewType } from '../types';
-import { Move, RotateCw } from 'lucide-react';
+import { Move, RotateCw, Maximize, MousePointer2 } from 'lucide-react';
 
 interface Viewer3DProps {
   activeShape: ShapeDefinition;
@@ -49,6 +49,10 @@ const Viewer3D: React.FC<Viewer3DProps> = ({
   onPartUpdate
 }) => {
   const [transformMode, setTransformMode] = useState<TransformMode>('translate');
+  
+  // Ref to track mouse movement to distinguish click from drag
+  const pointerStartRef = useRef<{x: number, y: number}>({ x: 0, y: 0 });
+  const isDraggingRef = useRef(false);
 
   const getViewName = (type: ViewType) => {
       switch(type) {
@@ -61,11 +65,36 @@ const Viewer3D: React.FC<Viewer3DProps> = ({
   }
 
   const isBuilderMode = onPartClick !== undefined;
-  // If multiple items are selected, disable individual transform controls (or handle group, simplified to single)
   const isSingleSelection = selectedPartIndices && selectedPartIndices.length === 1;
 
+  // Handle background click (deselect)
+  const handlePointerDown = (e: React.PointerEvent) => {
+      pointerStartRef.current = { x: e.clientX, y: e.clientY };
+      isDraggingRef.current = false;
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+      const dx = Math.abs(e.clientX - pointerStartRef.current.x);
+      const dy = Math.abs(e.clientY - pointerStartRef.current.y);
+      
+      // If moved more than 5 pixels, treat as drag (camera rotate), ignore click
+      if (dx > 5 || dy > 5) {
+          isDraggingRef.current = true;
+      } else {
+          isDraggingRef.current = false;
+          // Valid click on background -> Deselect
+          if (isBuilderMode && onPartClick) {
+              onPartClick(-1, false);
+          }
+      }
+  };
+
   return (
-    <div className="w-full h-full bg-slate-50 relative" onClick={() => isBuilderMode && onPartClick && onPartClick(-1, false)}>
+    <div 
+        className="w-full h-full bg-slate-50 relative" 
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+    >
       
       <Canvas shadows camera={{ fov: 45 }}>
         <fog attach="fog" args={['#f8fafc', 10, 40]} />
@@ -115,30 +144,39 @@ const Viewer3D: React.FC<Viewer3DProps> = ({
             <p className="text-xs text-slate-500 font-mono mb-2">{getViewName(viewType)}</p>
             {isBuilderMode && (
               <div className="mt-2 border-t border-slate-200 pt-2 text-xs text-blue-600">
-                <p>1. 单击选中 (Ctrl+单击多选)</p>
-                <p>2. 拖拽轴线移动/旋转 (仅单选)</p>
-                <p>3. 使用侧边栏进行布尔运算</p>
+                <p>1. 点击图形选中 (Ctrl+单击多选)</p>
+                <p>2. 拖拽轴线可直接操作</p>
               </div>
             )}
         </div>
       </div>
 
-      {/* Builder Mode Transform Tools (Only single select) */}
+      {/* Builder Mode Transform Tools */}
       {isBuilderMode && isSingleSelection && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-slate-200 p-1 rounded-lg shadow-sm flex gap-1 z-20" onClick={(e) => e.stopPropagation()}>
+        <div 
+            className="absolute top-4 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-slate-200 p-1 rounded-lg shadow-sm flex gap-1 z-20" 
+            onPointerDown={(e) => e.stopPropagation()} // Prevent gizmo clicks from triggering background logic
+        >
            <button 
              onClick={() => setTransformMode('translate')}
              className={`p-2 rounded ${transformMode === 'translate' ? 'bg-blue-100 text-blue-600' : 'text-slate-600 hover:bg-slate-100'}`}
-             title="移动"
+             title="移动 (Translate)"
            >
              <Move className="w-4 h-4"/>
            </button>
            <button 
              onClick={() => setTransformMode('rotate')}
              className={`p-2 rounded ${transformMode === 'rotate' ? 'bg-blue-100 text-blue-600' : 'text-slate-600 hover:bg-slate-100'}`}
-             title="旋转"
+             title="旋转 (Rotate)"
            >
              <RotateCw className="w-4 h-4"/>
+           </button>
+           <button 
+             onClick={() => setTransformMode('scale')}
+             className={`p-2 rounded ${transformMode === 'scale' ? 'bg-blue-100 text-blue-600' : 'text-slate-600 hover:bg-slate-100'}`}
+             title="缩放 (Scale)"
+           >
+             <Maximize className="w-4 h-4"/>
            </button>
         </div>
       )}

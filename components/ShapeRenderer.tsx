@@ -31,23 +31,20 @@ const PartRenderer: React.FC<{
   }, [type, part.geometryData]);
 
   // Material properties
-  // Allow user defined color to persist even when selected
-  const baseColor = color || '#60a5fa';
   const materialProps = {
-    color: baseColor,
+    color: color || '#60a5fa',
     roughness: 0.5,
     metalness: 0.1,
-    // Add emissive glow when selected instead of overriding base color
     emissive: isSelected ? "#555555" : "#000000",
-    emissiveIntensity: isSelected ? 0.5 : 0
+    emissiveIntensity: isSelected ? 0.3 : 0
   };
 
-  const handlePointerOver = (e: any) => {
-    e.stopPropagation();
-    document.body.style.cursor = 'pointer';
-  };
-  const handlePointerOut = (e: any) => {
-    document.body.style.cursor = 'auto';
+  const handlePointerDown = (e: any) => {
+     if (onClick) {
+         e.stopPropagation();
+         // We handle the actual 'click' logic in the parent's logic or simple onClick, 
+         // but stopPropagation here ensures background doesn't catch it immediately.
+     }
   };
 
   // Common mesh props
@@ -55,36 +52,41 @@ const PartRenderer: React.FC<{
     ref: meshRef,
     position: position,
     rotation: rotation,
-    onClick: onClick,
-    onPointerOver: onClick ? handlePointerOver : undefined,
-    onPointerOut: onClick ? handlePointerOut : undefined,
+    scale: scale, // Apply scale directly to mesh
+    onClick: onClick ? (e: any) => {
+        e.stopPropagation();
+        onClick(e);
+    } : undefined,
+    onPointerDown: handlePointerDown,
     castShadow: true,
     receiveShadow: true
   };
 
+  // Render Unit Geometries (Size 1) so scale prop works perfectly
   const renderGeometry = () => {
     switch (type) {
       case PrimitiveType.BOX:
-        return <boxGeometry args={scale} />;
+        return <boxGeometry args={[1, 1, 1]} />;
       case PrimitiveType.CYLINDER:
-        return <cylinderGeometry args={[scale[0], scale[0], scale[1], 32]} />;
+        // RadiusTop, RadiusBottom, Height, Segments. 
+        // Radius 0.5 = Diameter 1. Height 1.
+        return <cylinderGeometry args={[0.5, 0.5, 1, 32]} />;
       case PrimitiveType.CONE:
-        return <coneGeometry args={[scale[0], scale[1], 4]} />;
+        // Radius 0.5 = Diameter 1. Height 1.
+        return <coneGeometry args={[0.5, 1, 32]} />;
       case PrimitiveType.WEDGE:
-        return <cylinderGeometry args={[scale[0], scale[0], scale[1], 3]} />;
-      case PrimitiveType.CUSTOM:
-        return customGeometry ? <primitive object={customGeometry} /> : null;
+         // 3-sided cylinder (prism)
+        return <cylinderGeometry args={[0.5, 0.5, 1, 3]} />;
       default:
         return null;
     }
   };
 
   const renderEdges = () => {
-    // Only show simple edges for boxes for now to avoid clutter
     if (type === PrimitiveType.BOX) {
          return (
             <lineSegments>
-                <edgesGeometry args={[new THREE.BoxGeometry(...scale)]} />
+                <edgesGeometry args={[new THREE.BoxGeometry(1, 1, 1)]} />
                 <lineBasicMaterial color={isSelected ? "#fbbf24" : "black"} linewidth={2} />
             </lineSegments>
         );
@@ -94,28 +96,25 @@ const PartRenderer: React.FC<{
 
   return (
     <>
-      <mesh {...meshProps}>
-        {renderGeometry()}
+      <mesh {...meshProps} geometry={type === PrimitiveType.CUSTOM && customGeometry ? customGeometry : undefined}>
+        {type !== PrimitiveType.CUSTOM && renderGeometry()}
         <meshStandardMaterial {...materialProps} flatShading={type === PrimitiveType.WEDGE || type === PrimitiveType.CONE} />
         {renderEdges()}
-        {isSelected && (
+        {isSelected && type !== PrimitiveType.CUSTOM && (
           <mesh>
-              {/* Selection Halo/Wireframe for primitives */}
-               {type !== PrimitiveType.CUSTOM && (
-                 <>
-                    <boxGeometry args={[scale[0]*1.05, scale[1]*1.05, scale[2]*1.05]} />
-                    <meshBasicMaterial color="#fbbf24" wireframe />
-                 </>
-               )}
+             {/* Selection Highlight Box (slightly larger) */}
+             <boxGeometry args={[1.02, 1.02, 1.02]} />
+             <meshBasicMaterial color="#fbbf24" wireframe transparent opacity={0.5} />
           </mesh>
         )}
       </mesh>
 
-      {/* Transform Controls for Mouse Interaction - Only enable if this is the ONLY selected item to avoid confusion or multiple controls */}
+      {/* Transform Controls */}
       {isSelected && onTransformEnd && (
         <TransformControls 
           object={meshRef} 
           mode={transformMode}
+          // Important: Capture the exact mesh properties on drag end
           onMouseUp={() => {
             if (meshRef.current) {
               const m = meshRef.current;
@@ -123,7 +122,9 @@ const PartRenderer: React.FC<{
                 ...part,
                 position: [m.position.x, m.position.y, m.position.z],
                 rotation: [m.rotation.x, m.rotation.y, m.rotation.z],
-                scale: [type === PrimitiveType.BOX ? m.scale.x : scale[0], type === PrimitiveType.BOX ? m.scale.y : scale[1], type === PrimitiveType.BOX ? m.scale.z : scale[2]] 
+                // Now we simply read the scale from the mesh for ALL types
+                // because we are using unit geometries.
+                scale: [m.scale.x, m.scale.y, m.scale.z] 
               });
             }
           }}
@@ -157,14 +158,10 @@ const ShapeRenderer: React.FC<ShapeRendererProps> = ({
                 key={index} 
                 part={part} 
                 isSelected={isSelected}
-                // If multiple items are selected, only show transform controls for the LAST one (active) or all? 
-                // Typically CAD tools show one gizmo for the group or individual gizmos. 
-                // To keep it simple, only show gizmo if it is the ONLY selected item.
                 onTransformEnd={isSelected && selectedPartIndices.length === 1 && onPartUpdate ? (updatedPart) => onPartUpdate(index, updatedPart) : undefined}
                 transformMode={transformMode}
                 onClick={onPartClick ? (e) => { 
-                    e.stopPropagation(); 
-                    // Check for shift/ctrl key
+                    // Logic handled in PartRenderer stopPropagation, but here we trigger the state change
                     const isMulti = e.shiftKey || e.ctrlKey || e.metaKey;
                     onPartClick(index, isMulti); 
                 } : undefined}
