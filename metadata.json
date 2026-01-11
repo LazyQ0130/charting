@@ -1,0 +1,5 @@
+{
+  "name": "GeoTech View - 工程制图视角",
+  "description": "一个综合性的工程制图和画法几何交互式学习工具。可视化组合立体图形，自由旋转，并可在主视图、俯视图和左视图之间即时切换。",
+  "requestFramePermissions": []
+}
