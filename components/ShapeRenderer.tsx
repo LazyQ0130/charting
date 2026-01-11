@@ -13,22 +13,58 @@ const PartRenderer: React.FC<{
   transformMode?: TransformMode;
   onTransformEnd?: (updatedPart: GeometryPart) => void;
 }> = ({ part, isSelected, onClick, transformMode = 'translate', onTransformEnd }) => {
-  const { type, position, rotation, scale, color } = part;
+  const { type, position, rotation, scale, color, segments } = part;
   const meshRef = useRef<THREE.Mesh>(null);
   
-  // Custom Geometry Loader
-  const customGeometry = useMemo(() => {
-    if (type === PrimitiveType.CUSTOM && part.geometryData) {
-        try {
-            const loader = new THREE.BufferGeometryLoader();
-            return loader.parse(part.geometryData);
-        } catch (e) {
-            console.error("Failed to load custom geometry", e);
-            return null;
+  // Custom Geometry construction with Z-up alignment
+  const geometry = useMemo(() => {
+    let geo: THREE.BufferGeometry | null = null;
+    const segs = segments || 32;
+
+    switch (type) {
+      case PrimitiveType.BOX:
+        geo = new THREE.BoxGeometry(1, 1, 1);
+        break;
+      case PrimitiveType.SPHERE:
+        geo = new THREE.SphereGeometry(0.5, segs, Math.max(16, segs/2));
+        break;
+      case PrimitiveType.CYLINDER:
+        geo = new THREE.CylinderGeometry(0.5, 0.5, 1, segs);
+        geo.rotateX(Math.PI / 2); // Align Y (height) to Z
+        break;
+      case PrimitiveType.PRISM:
+        // Prism is a cylinder with low segments (e.g. 3, 4, 5, 6)
+        geo = new THREE.CylinderGeometry(0.5, 0.5, 1, segments || 3);
+        geo.rotateX(Math.PI / 2); // Align Y to Z
+        break;
+      case PrimitiveType.WEDGE: // Legacy mapping to 3-sided prism
+        geo = new THREE.CylinderGeometry(0.5, 0.5, 1, 3);
+        geo.rotateX(Math.PI / 2);
+        break;
+      case PrimitiveType.CONE:
+         geo = new THREE.ConeGeometry(0.5, 1, segs);
+         geo.rotateX(Math.PI / 2); // Align Y to Z
+         break;
+      case PrimitiveType.PYRAMID:
+         // Pyramid is a cone with low segments
+         geo = new THREE.ConeGeometry(0.5, 1, segments || 4);
+         geo.rotateX(Math.PI / 2); // Align Y to Z
+         break;
+      case PrimitiveType.CUSTOM:
+        if (part.geometryData) {
+            try {
+                const loader = new THREE.BufferGeometryLoader();
+                geo = loader.parse(part.geometryData);
+            } catch (e) {
+                console.error("Failed to load custom geometry", e);
+            }
         }
+        break;
+      default:
+        geo = new THREE.BoxGeometry(1, 1, 1);
     }
-    return null;
-  }, [type, part.geometryData]);
+    return geo;
+  }, [type, part.geometryData, segments]);
 
   // Material properties
   const materialProps = {
@@ -42,17 +78,34 @@ const PartRenderer: React.FC<{
   const handlePointerDown = (e: any) => {
      if (onClick) {
          e.stopPropagation();
-         // We handle the actual 'click' logic in the parent's logic or simple onClick, 
-         // but stopPropagation here ensures background doesn't catch it immediately.
      }
   };
+
+  const renderEdges = () => {
+     // Edges helper also needs Z-up alignment if it's based on primitive
+     if (!isSelected && type !== PrimitiveType.BOX && type !== PrimitiveType.PRISM && type !== PrimitiveType.WEDGE && type !== PrimitiveType.PYRAMID) return null;
+     
+     // For flat shading primitives, show edges
+     if (geometry) {
+         return (
+            <lineSegments>
+                <edgesGeometry args={[geometry]} />
+                <lineBasicMaterial color={isSelected ? "#fbbf24" : "black"} linewidth={2} />
+            </lineSegments>
+        );
+     }
+     return null;
+  };
+
+  // Determine if we should use flat shading (low poly)
+  const isFlat = [PrimitiveType.BOX, PrimitiveType.PRISM, PrimitiveType.WEDGE, PrimitiveType.PYRAMID].includes(type);
 
   // Common mesh props
   const meshProps = {
     ref: meshRef,
     position: position,
     rotation: rotation,
-    scale: scale, // Apply scale directly to mesh
+    scale: scale, 
     onClick: onClick ? (e: any) => {
         e.stopPropagation();
         onClick(e);
@@ -62,48 +115,16 @@ const PartRenderer: React.FC<{
     receiveShadow: true
   };
 
-  // Render Unit Geometries (Size 1) so scale prop works perfectly
-  const renderGeometry = () => {
-    switch (type) {
-      case PrimitiveType.BOX:
-        return <boxGeometry args={[1, 1, 1]} />;
-      case PrimitiveType.CYLINDER:
-        // RadiusTop, RadiusBottom, Height, Segments. 
-        // Radius 0.5 = Diameter 1. Height 1.
-        return <cylinderGeometry args={[0.5, 0.5, 1, 32]} />;
-      case PrimitiveType.CONE:
-        // Radius 0.5 = Diameter 1. Height 1.
-        return <coneGeometry args={[0.5, 1, 32]} />;
-      case PrimitiveType.WEDGE:
-         // 3-sided cylinder (prism)
-        return <cylinderGeometry args={[0.5, 0.5, 1, 3]} />;
-      default:
-        return null;
-    }
-  };
-
-  const renderEdges = () => {
-    if (type === PrimitiveType.BOX) {
-         return (
-            <lineSegments>
-                <edgesGeometry args={[new THREE.BoxGeometry(1, 1, 1)]} />
-                <lineBasicMaterial color={isSelected ? "#fbbf24" : "black"} linewidth={2} />
-            </lineSegments>
-        );
-    }
-    return null;
-  };
+  if (!geometry) return null;
 
   return (
     <>
-      <mesh {...meshProps} geometry={type === PrimitiveType.CUSTOM && customGeometry ? customGeometry : undefined}>
-        {type !== PrimitiveType.CUSTOM && renderGeometry()}
-        <meshStandardMaterial {...materialProps} flatShading={type === PrimitiveType.WEDGE || type === PrimitiveType.CONE} />
+      <mesh {...meshProps} geometry={geometry}>
+        <meshStandardMaterial {...materialProps} flatShading={isFlat} />
         {renderEdges()}
         {isSelected && type !== PrimitiveType.CUSTOM && (
           <mesh>
-             {/* Selection Highlight Box (slightly larger) */}
-             <boxGeometry args={[1.02, 1.02, 1.02]} />
+             {/* Selection Highlight Box - we use a slightly larger version of the same geometry */}
              <meshBasicMaterial color="#fbbf24" wireframe transparent opacity={0.5} />
           </mesh>
         )}
@@ -114,8 +135,7 @@ const PartRenderer: React.FC<{
         <TransformControls 
           object={meshRef} 
           mode={transformMode}
-          space="local" // Use local space so handles align with rotated parent group (Z-up)
-          // Important: Capture the exact mesh properties on drag end
+          space="local" // In Z-up world, Local Z is Up (if rotation is 0). Gizmo Blue = Up.
           onMouseUp={() => {
             if (meshRef.current) {
               const m = meshRef.current;
@@ -123,8 +143,6 @@ const PartRenderer: React.FC<{
                 ...part,
                 position: [m.position.x, m.position.y, m.position.z],
                 rotation: [m.rotation.x, m.rotation.y, m.rotation.z],
-                // Now we simply read the scale from the mesh for ALL types
-                // because we are using unit geometries.
                 scale: [m.scale.x, m.scale.y, m.scale.z] 
               });
             }
@@ -162,7 +180,6 @@ const ShapeRenderer: React.FC<ShapeRendererProps> = ({
                 onTransformEnd={isSelected && selectedPartIndices.length === 1 && onPartUpdate ? (updatedPart) => onPartUpdate(index, updatedPart) : undefined}
                 transformMode={transformMode}
                 onClick={onPartClick ? (e) => { 
-                    // Logic handled in PartRenderer stopPropagation, but here we trigger the state change
                     const isMulti = e.shiftKey || e.ctrlKey || e.metaKey;
                     onPartClick(index, isMulti); 
                 } : undefined}

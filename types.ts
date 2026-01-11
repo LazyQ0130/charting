@@ -1,9 +1,12 @@
 export enum PrimitiveType {
   BOX = 'BOX',
-  CYLINDER = 'CYLINDER',
-  WEDGE = 'WEDGE', // Triangular prism
-  CONE = 'CONE',
-  CUSTOM = 'CUSTOM' // For CSG results
+  CYLINDER = 'CYLINDER', // High poly cylinder
+  PRISM = 'PRISM',       // Low poly cylinder (3-12 sides)
+  SPHERE = 'SPHERE',
+  CONE = 'CONE',         // High poly cone
+  PYRAMID = 'PYRAMID',   // Low poly cone (3-12 sides)
+  WEDGE = 'WEDGE',       // Legacy, mapped to Prism with 3 sides
+  CUSTOM = 'CUSTOM'      // For CSG results
 }
 
 export interface GeometryPart {
@@ -12,6 +15,7 @@ export interface GeometryPart {
   rotation?: [number, number, number]; // Euler angles
   scale: [number, number, number];
   color?: string;
+  segments?: number; // For Cylinders, Cones, Prisms, Pyramids, Spheres
   geometryData?: any; // Stores JSON exported BufferGeometry for CUSTOM types
 }
 
@@ -28,4 +32,4 @@ export interface Category {
   shapes: ShapeDefinition[];
 }
 
-export type ViewType = 'ISO' | 'FRONT' | 'TOP' | 'LEFT';
+export type ViewType = 'ISO' | 'FRONT' | 'TOP' | 'LEFT' | 'ALL';

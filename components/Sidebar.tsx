@@ -1,6 +1,6 @@
 import React from 'react';
 import { Category, ShapeDefinition, PrimitiveType, GeometryPart } from '../types';
-import { Box, Layers, Triangle, Plus, Trash2, RotateCcw, PenTool, MousePointer2, Combine, ScanLine, XCircle, Undo, Redo, Palette, Save } from 'lucide-react';
+import { Box, Layers, Triangle, Trash2, RotateCcw, PenTool, MousePointer2, Combine, ScanLine, XCircle, Undo, Redo, Palette, Save, Circle, Pyramid } from 'lucide-react';
 
 interface SidebarProps {
   categories: Category[]; 
@@ -72,9 +72,23 @@ const Sidebar: React.FC<SidebarProps> = ({
     onUpdatePart(primaryIndex, { ...part, color: newColor });
   };
 
+  const handleSegmentChange = (val: string) => {
+    if (primaryIndex === null) return;
+    const part = customShapeParts[primaryIndex];
+    let v = parseInt(val);
+    if (v < 3) v = 3;
+    if (v > 64) v = 64;
+    onUpdatePart(primaryIndex, { ...part, segments: v });
+  };
+
   const renderBuilderControls = () => {
       const primaryPart = primaryIndex !== null ? customShapeParts[primaryIndex] : null;
       const canOperate = selectedPartIndices.length >= 2;
+      
+      // Determine if selected part supports segments (Cylinder, Prism, Cone, Pyramid, Sphere)
+      const showSegmentsControl = primaryPart && (
+          [PrimitiveType.CYLINDER, PrimitiveType.PRISM, PrimitiveType.CONE, PrimitiveType.PYRAMID, PrimitiveType.SPHERE, PrimitiveType.WEDGE].includes(primaryPart.type)
+      );
 
       return (
           <div className="flex flex-col h-full">
@@ -84,9 +98,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                   </h2>
                   <p className="text-xs text-blue-600 mb-4 leading-relaxed">
                       <strong>操作说明：</strong>
-                      <br/>1. <strong>点击</strong>物体选中。
+                      <br/>1. <strong>点击</strong>物体选中，拖拽轴移动。
                       <br/>2. 按住 <strong>Shift/Ctrl + 点击</strong> 进行多选。
-                      <br/>3. 选中两个以上物体进行布尔运算。
+                      <br/>3. 蓝色轴为Z轴(高度)。
                   </p>
                   
                   {/* Undo/Redo Toolbar */}
@@ -114,11 +128,20 @@ const Sidebar: React.FC<SidebarProps> = ({
                       <button onClick={() => onAddPart(PrimitiveType.BOX)} className="flex flex-col items-center justify-center p-2 bg-white rounded border border-blue-200 hover:bg-blue-100 text-xs shadow-sm">
                           <Box className="w-4 h-4 mb-1 text-blue-500"/> 长方体
                       </button>
+                      <button onClick={() => onAddPart(PrimitiveType.SPHERE)} className="flex flex-col items-center justify-center p-2 bg-white rounded border border-blue-200 hover:bg-blue-100 text-xs shadow-sm">
+                          <Circle className="w-4 h-4 mb-1 text-blue-500"/> 球体
+                      </button>
                       <button onClick={() => onAddPart(PrimitiveType.CYLINDER)} className="flex flex-col items-center justify-center p-2 bg-white rounded border border-blue-200 hover:bg-blue-100 text-xs shadow-sm">
                           <Layers className="w-4 h-4 mb-1 text-blue-500"/> 圆柱体
                       </button>
-                      <button onClick={() => onAddPart(PrimitiveType.WEDGE)} className="flex flex-col items-center justify-center p-2 bg-white rounded border border-blue-200 hover:bg-blue-100 text-xs shadow-sm">
-                          <Triangle className="w-4 h-4 mb-1 text-blue-500"/> 棱柱(楔)
+                      <button onClick={() => onAddPart(PrimitiveType.PRISM)} className="flex flex-col items-center justify-center p-2 bg-white rounded border border-blue-200 hover:bg-blue-100 text-xs shadow-sm">
+                          <Box className="w-4 h-4 mb-1 text-blue-500 rotate-45"/> 棱柱
+                      </button>
+                       <button onClick={() => onAddPart(PrimitiveType.PYRAMID)} className="flex flex-col items-center justify-center p-2 bg-white rounded border border-blue-200 hover:bg-blue-100 text-xs shadow-sm">
+                          <Pyramid className="w-4 h-4 mb-1 text-blue-500"/> 棱锥
+                      </button>
+                      <button onClick={() => onAddPart(PrimitiveType.CONE)} className="flex flex-col items-center justify-center p-2 bg-white rounded border border-blue-200 hover:bg-blue-100 text-xs shadow-sm">
+                          <Triangle className="w-4 h-4 mb-1 text-blue-500"/> 圆锥
                       </button>
                   </div>
 
@@ -157,6 +180,15 @@ const Sidebar: React.FC<SidebarProps> = ({
                   <div className="space-y-2">
                       {customShapeParts.map((part, idx) => {
                           const isSelected = selectedPartIndices.includes(idx);
+                          let typeName = '组合体';
+                          if (part.type === PrimitiveType.BOX) typeName = '长方体';
+                          else if (part.type === PrimitiveType.SPHERE) typeName = '球体';
+                          else if (part.type === PrimitiveType.CYLINDER) typeName = '圆柱体';
+                          else if (part.type === PrimitiveType.CONE) typeName = '圆锥';
+                          else if (part.type === PrimitiveType.PRISM) typeName = `${part.segments || 3}棱柱`;
+                          else if (part.type === PrimitiveType.PYRAMID) typeName = `${part.segments || 3}棱锥`;
+                          else if (part.type === PrimitiveType.WEDGE) typeName = '三棱柱';
+
                           return (
                             <div 
                                 key={idx}
@@ -176,7 +208,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                                       style={{ backgroundColor: part.color || '#60a5fa' }}
                                     ></div>
                                     <div className="w-4 text-center text-xs text-slate-400">{idx+1}</div>
-                                    <span>{part.type === 'BOX' ? '长方体' : part.type === 'CYLINDER' ? '圆柱体' : part.type === 'WEDGE' ? '三棱柱' : '组合体'}</span>
+                                    <span>{typeName}</span>
                                 </div>
                                 {isSelected && (
                                     <button 
@@ -221,6 +253,29 @@ const Sidebar: React.FC<SidebarProps> = ({
                               <span className="text-xs text-slate-400 font-mono">{primaryPart.color || '#60a5fa'}</span>
                           </div>
                       </div>
+
+                       {/* Segments Slider (New) */}
+                       {showSegmentsControl && (
+                          <div>
+                              <label className="block text-slate-500 mb-1">
+                                  {primaryPart.type === PrimitiveType.SPHERE ? '精度 (分段)' : '侧面数 (棱数)'}
+                              </label>
+                              <div className="flex items-center gap-2">
+                                  <input 
+                                      type="range" 
+                                      min={primaryPart.type === PrimitiveType.PRISM || primaryPart.type === PrimitiveType.PYRAMID ? "3" : "8"}
+                                      max={primaryPart.type === PrimitiveType.PRISM || primaryPart.type === PrimitiveType.PYRAMID ? "12" : "64"}
+                                      step="1"
+                                      value={primaryPart.segments || (primaryPart.type.includes('PRISM') ? 3 : 32)}
+                                      onChange={(e) => handleSegmentChange(e.target.value)}
+                                      className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                                  />
+                                  <span className="w-8 text-center text-slate-600 bg-white border border-slate-200 rounded px-1">
+                                      {primaryPart.segments}
+                                  </span>
+                              </div>
+                          </div>
+                      )}
 
                       {/* Position */}
                       <div>

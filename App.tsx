@@ -3,7 +3,7 @@ import Viewer3D from './components/Viewer3D';
 import Sidebar from './components/Sidebar';
 import { SHAPE_CATEGORIES } from './constants';
 import { ShapeDefinition, ViewType, PrimitiveType, GeometryPart, Category } from './types';
-import { Menu, Box, X } from 'lucide-react';
+import { Menu, Box, X, LayoutGrid } from 'lucide-react';
 import * as THREE from 'three';
 import { SUBTRACTION, ADDITION, INTERSECTION, Brush, Evaluator } from 'three-bvh-csg';
 
@@ -248,12 +248,18 @@ const App: React.FC = () => {
   // Builder Actions
   const handleAddPart = (type: PrimitiveType) => {
     pushToHistory();
+    
+    let defaultSegs = 32;
+    if (type === PrimitiveType.PRISM) defaultSegs = 4; // Default Cube/Prism
+    if (type === PrimitiveType.PYRAMID) defaultSegs = 4;
+    
     const newPart: GeometryPart = {
         type,
         position: [0, 0, 0],
-        scale: type === PrimitiveType.BOX ? [2, 2, 2] : [2, 2, 2], // Default bigger start size
-        rotation: [0, 0, 0],
-        color: '#60a5fa'
+        scale: [2, 2, 2],
+        rotation: [0, 0, 0], 
+        color: '#60a5fa',
+        segments: defaultSegs
     };
     setCustomParts([...customParts, newPart]);
     setSelectedPartIndices([customParts.length]); 
@@ -292,16 +298,28 @@ const App: React.FC = () => {
   // Helper to create a ThreeJS Brush from GeometryPart
   const createBrushFromPart = (part: GeometryPart): Brush => {
       let geo: THREE.BufferGeometry;
-      
+      const segs = part.segments || 32;
+
       // Re-create geometry based on type (Using UNIT SIZES to match ShapeRenderer)
       if (part.type === PrimitiveType.BOX) {
           geo = new THREE.BoxGeometry(1, 1, 1);
+      } else if (part.type === PrimitiveType.SPHERE) {
+          geo = new THREE.SphereGeometry(0.5, segs, Math.max(16, segs/2));
       } else if (part.type === PrimitiveType.CYLINDER) {
-          geo = new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
+          geo = new THREE.CylinderGeometry(0.5, 0.5, 1, segs);
+          geo.rotateX(Math.PI/2); // Align to Z-up
+      } else if (part.type === PrimitiveType.PRISM) {
+           geo = new THREE.CylinderGeometry(0.5, 0.5, 1, segs);
+           geo.rotateX(Math.PI/2); // Align to Z-up
+      } else if (part.type === PrimitiveType.CONE) {
+           geo = new THREE.ConeGeometry(0.5, 1, segs);
+           geo.rotateX(Math.PI/2); // Align to Z-up
+      } else if (part.type === PrimitiveType.PYRAMID) {
+           geo = new THREE.ConeGeometry(0.5, 1, segs);
+           geo.rotateX(Math.PI/2); // Align to Z-up
       } else if (part.type === PrimitiveType.WEDGE) {
            geo = new THREE.CylinderGeometry(0.5, 0.5, 1, 3);
-      } else if (part.type === PrimitiveType.CONE) {
-           geo = new THREE.ConeGeometry(0.5, 1, 32);
+           geo.rotateX(Math.PI/2); // Align to Z-up
       } else if (part.type === PrimitiveType.CUSTOM && part.geometryData) {
            geo = new THREE.BufferGeometryLoader().parse(part.geometryData);
       } else {
@@ -429,20 +447,27 @@ const App: React.FC = () => {
                 <ControlButton 
                     active={viewType === 'FRONT'} 
                     onClick={() => setViewType('FRONT')}
-                    label="主视图"
+                    label="主视"
                     icon={<div className="font-bold text-xs">V</div>} 
                 />
                  <ControlButton 
                     active={viewType === 'TOP'} 
                     onClick={() => setViewType('TOP')}
-                    label="俯视图"
+                    label="俯视"
                     icon={<div className="font-bold text-xs">H</div>} 
                 />
                  <ControlButton 
                     active={viewType === 'LEFT'} 
                     onClick={() => setViewType('LEFT')}
-                    label="左视图"
+                    label="左视"
                     icon={<div className="font-bold text-xs">W</div>} 
+                />
+                <div className="w-px h-6 bg-slate-300 mx-1"></div>
+                <ControlButton 
+                    active={viewType === 'ALL'} 
+                    onClick={() => setViewType('ALL')}
+                    label="四视图"
+                    icon={<LayoutGrid className="w-4 h-4" />} 
                 />
             </div>
         </div>
@@ -460,7 +485,7 @@ const ControlButton: React.FC<{
     <button
         onClick={onClick}
         className={`
-            flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap
+            flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap
             ${active 
                 ? 'bg-blue-600 text-white shadow-md' 
                 : 'bg-transparent text-slate-600 hover:bg-slate-100'

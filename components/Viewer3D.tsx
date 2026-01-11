@@ -1,6 +1,6 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { CameraControls, Grid, Environment, Text } from '@react-three/drei';
+import { CameraControls, Grid, Environment, Text, View, PerspectiveCamera, OrthographicCamera } from '@react-three/drei';
 import ShapeRenderer, { TransformMode } from './ShapeRenderer';
 import { GeometryPart, ShapeDefinition, ViewType } from '../types';
 import { Move, RotateCw, Maximize } from 'lucide-react';
@@ -15,226 +15,290 @@ interface Viewer3DProps {
 }
 
 const CoordinateAxes = () => {
-    const axisLength = 10; // Length in each direction (total 20)
-    const axisRadius = 0.03;
-    const arrowLength = 0.5;
-    const arrowWidth = 0.2;
-    const opacity = 0.5;
+    const axisLength = 20; 
+    const opacity = 0.9;
     const textOffset = 0.6;
+    const thickness = 0.02; // Thinner axes
     
-    // Faint colors
-    const colorX = "#fda4af"; // Light Red
-    const colorY = "#86efac"; // Light Green
-    const colorZ = "#93c5fd"; // Light Blue
+    const colorX = "#ef4444"; // Red-500
+    const colorY = "#22c55e"; // Green-500
+    const colorZ = "#3b82f6"; // Blue-500
 
     return (
         <group>
-            {/* X Axis (Red) - Local X */}
-            {/* Main shaft spanning negative to positive */}
-            <mesh rotation={[0, 0, -Math.PI / 2]}>
-                <cylinderGeometry args={[axisRadius, axisRadius, axisLength * 2, 16]} />
-                <meshBasicMaterial color={colorX} transparent opacity={opacity} />
+            {/* X Axis (Red) - Right */}
+            <mesh position={[axisLength/2, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
+                <cylinderGeometry args={[thickness, thickness, axisLength, 16]} />
+                <meshStandardMaterial color={colorX} transparent opacity={opacity} />
             </mesh>
-            {/* Arrow at positive end */}
-            <mesh position={[axisLength, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
-                <coneGeometry args={[arrowWidth, arrowLength, 16]} />
-                <meshBasicMaterial color={colorX} transparent opacity={opacity} />
-            </mesh>
-            <Text position={[axisLength + textOffset, 0, 0]} fontSize={0.5} color={colorX}>X</Text>
+            <Text position={[axisLength + textOffset, 0, 0]} fontSize={0.6} color={colorX} anchorX="center" anchorY="middle">X</Text>
 
-            {/* Y Axis (Green) - Local Y (mapped to Depth) */}
-            <mesh>
-                <cylinderGeometry args={[axisRadius, axisRadius, axisLength * 2, 16]} />
-                <meshBasicMaterial color={colorY} transparent opacity={opacity} />
+            {/* Y Axis (Green) - Back */}
+            <mesh position={[0, axisLength/2, 0]}> 
+                <cylinderGeometry args={[thickness, thickness, axisLength, 16]} />
+                <meshStandardMaterial color={colorY} transparent opacity={opacity} />
             </mesh>
-            <mesh position={[0, axisLength, 0]}>
-                <coneGeometry args={[arrowWidth, arrowLength, 16]} />
-                <meshBasicMaterial color={colorY} transparent opacity={opacity} />
-            </mesh>
-            <Text position={[0, axisLength + textOffset, 0]} fontSize={0.5} color={colorY}>Y</Text>
+            <Text position={[0, axisLength + textOffset, 0]} fontSize={0.6} color={colorY} anchorX="center" anchorY="middle">Y</Text>
 
-            {/* Z Axis (Blue) - Local Z (mapped to Height) */}
-            <mesh rotation={[Math.PI / 2, 0, 0]}>
-                <cylinderGeometry args={[axisRadius, axisRadius, axisLength * 2, 16]} />
-                <meshBasicMaterial color={colorZ} transparent opacity={opacity} />
+            {/* Z Axis (Blue) - Up */}
+            <mesh position={[0, 0, axisLength/2]} rotation={[Math.PI / 2, 0, 0]}>
+                <cylinderGeometry args={[thickness, thickness, axisLength, 16]} />
+                <meshStandardMaterial color={colorZ} transparent opacity={opacity} />
             </mesh>
-            <mesh position={[0, 0, axisLength]} rotation={[Math.PI / 2, 0, 0]}>
-                <coneGeometry args={[arrowWidth, arrowLength, 16]} />
-                <meshBasicMaterial color={colorZ} transparent opacity={opacity} />
-            </mesh>
-            <Text position={[0, 0, axisLength + textOffset]} fontSize={0.5} color={colorZ}>Z</Text>
+            <Text position={[0, 0, axisLength + textOffset]} fontSize={0.6} color={colorZ} anchorX="center" anchorY="middle">Z</Text>
             
-            {/* Center Dot */}
+            {/* Center Sphere */}
             <mesh>
-                <sphereGeometry args={[0.08]} />
-                <meshBasicMaterial color="#94a3b8" transparent opacity={0.8} />
+                <sphereGeometry args={[thickness * 4]} />
+                <meshStandardMaterial color="#64748b" />
             </mesh>
         </group>
     );
 };
 
-const CameraManager = ({ viewType }: { viewType: ViewType }) => {
-  const controlsRef = useRef<CameraControls>(null);
+const SceneContent: React.FC<Viewer3DProps & { transformMode: TransformMode }> = (props) => {
+    return (
+        <>
+            <ambientLight intensity={0.7} />
+            <directionalLight 
+                position={[20, -30, 50]} 
+                intensity={1.5} 
+                castShadow 
+                shadow-bias={-0.0001}
+            />
+            <Environment preset="city" />
 
-  useEffect(() => {
-    if (!controlsRef.current) return;
+            <CoordinateAxes />
+            
+            <ShapeRenderer 
+                shape={props.activeShape} 
+                selectedPartIndices={props.selectedPartIndices}
+                onPartClick={props.onPartClick}
+                transformMode={props.transformMode}
+                onPartUpdate={props.onPartUpdate}
+            />
 
-    const transition = true; 
-    // Targets (0,0,0) by default
-    
-    // Note: Since we rotated the content -90 around X:
-    // World Y is now Content Z (Up).
-    // World X is Content X.
-    // World Z is Content -Y (Back/Front).
-
-    switch (viewType) {
-      case 'FRONT':
-        // Front View: Look from Front. 
-        // In standard engineering (Z-up), Front view looks along Y axis? 
-        // Here, visual front is looking at the X-Z plane (Height-Width).
-        // This corresponds to looking from World Z (Content -Y).
-        controlsRef.current.setLookAt(0, 0, 20, 0, 0, 0, transition);
-        break;
-      case 'TOP':
-        // Top View: Look from Top (World Y / Content Z).
-        controlsRef.current.setLookAt(0, 20, 0, 0, 0, 0, transition);
-        break;
-      case 'LEFT':
-        // Left View: Look from Left (World -X).
-        controlsRef.current.setLookAt(-20, 0, 0, 0, 0, 0, transition);
-        break;
-      case 'ISO':
-      default:
-        // Isometric
-        controlsRef.current.setLookAt(12, 12, 12, 0, 0, 0, transition);
-        break;
-    }
-  }, [viewType]);
-
-  return <CameraControls ref={controlsRef} makeDefault minDistance={2} maxDistance={100} />;
+            {/* Grid on XY plane (Z=0) */}
+            <Grid 
+                position={[0, 0, -0.01]} 
+                args={[60, 60]} 
+                rotation={[Math.PI/2, 0, 0]} 
+                cellColor="#cbd5e1" 
+                sectionColor="#94a3b8" 
+                fadeDistance={60} 
+                cellSize={1} 
+                sectionSize={5}
+                infiniteGrid
+            />
+            
+            <mesh position={[0, 0, -0.05]} receiveShadow rotation={[0,0,0]}>
+                <planeGeometry args={[200, 200]} />
+                <shadowMaterial opacity={0.15} />
+            </mesh>
+        </>
+    );
 };
 
-const Viewer3D: React.FC<Viewer3DProps> = ({ 
-  activeShape, 
-  viewType, 
-  selectedPartIndices, 
-  onPartClick,
-  onPartUpdate
-}) => {
+const CameraSync = ({ controls }: { controls: Record<string, React.RefObject<CameraControls | null>> }) => {
+    const locked = useRef(false);
+
+    useEffect(() => {
+        const handlers: Record<string, (e?: any) => void> = {};
+
+        Object.entries(controls).forEach(([key, ref]) => {
+            if (!ref.current) return;
+
+            // Using 'change' event which is standard for Drei CameraControls (wrapping Three's controls)
+            const handler = () => {
+                if (locked.current) return;
+                const source = ref.current;
+                if (!source) return;
+
+                locked.current = true;
+                const target = new THREE.Vector3();
+                source.getTarget(target);
+
+                // Sync Target (Pan)
+                Object.entries(controls).forEach(([k, targetRef]) => {
+                    if (k === key || !targetRef.current) return;
+                    targetRef.current.setTarget(target.x, target.y, target.z, false);
+                });
+
+                // Sync Zoom for Ortho views
+                if (['TOP', 'LEFT', 'FRONT'].includes(key)) {
+                    const sourceCam = source.camera;
+                    if (sourceCam instanceof THREE.OrthographicCamera) {
+                        const zoom = sourceCam.zoom;
+                        Object.entries(controls).forEach(([k, targetRef]) => {
+                            if (k === key || !targetRef.current) return;
+                            if (['TOP', 'LEFT', 'FRONT'].includes(k)) {
+                                const targetCtrl = targetRef.current;
+                                if (targetCtrl.camera instanceof THREE.OrthographicCamera) {
+                                    targetCtrl.zoomTo(zoom, false);
+                                }
+                            }
+                        });
+                    }
+                }
+                locked.current = false;
+            };
+
+            handlers[key] = handler;
+            // @ts-ignore - CameraControls type definition might miss internal event emitter types sometimes
+            ref.current.addEventListener('control', handler); 
+        });
+
+        return () => {
+            Object.entries(controls).forEach(([key, ref]) => {
+                if (ref.current && handlers[key]) {
+                    // @ts-ignore
+                    ref.current.removeEventListener('control', handlers[key]);
+                }
+            });
+        };
+    }, [controls]);
+
+    return null;
+};
+
+
+const Viewer3D: React.FC<Viewer3DProps> = (props) => {
   const [transformMode, setTransformMode] = useState<TransformMode>('translate');
   
-  // Ref to track mouse movement to distinguish click from drag
-  const pointerStartRef = useRef<{x: number, y: number}>({ x: 0, y: 0 });
-  const isDraggingRef = useRef(false);
+  // Refs
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mainViewRef = useRef<HTMLDivElement>(null);
+  const topViewRef = useRef<HTMLDivElement>(null);
+  const frontViewRef = useRef<HTMLDivElement>(null);
+  const leftViewRef = useRef<HTMLDivElement>(null);
 
-  const getViewName = (type: ViewType) => {
-      switch(type) {
-          case 'ISO': return '等轴测投影 (Isometric)';
-          case 'FRONT': return '主视图 (Front)';
-          case 'TOP': return '俯视图 (Top)';
-          case 'LEFT': return '左视图 (Left)';
-          default: return type;
-      }
-  }
+  // Camera Control Refs
+  const isoControls = useRef<CameraControls>(null);
+  const topControls = useRef<CameraControls>(null);
+  const frontControls = useRef<CameraControls>(null);
+  const leftControls = useRef<CameraControls>(null);
 
-  const isBuilderMode = onPartClick !== undefined;
-  const isSingleSelection = selectedPartIndices && selectedPartIndices.length === 1;
+  const isMultiView = props.viewType === 'ALL';
+  const isBuilderMode = props.onPartClick !== undefined;
+  const isSingleSelection = props.selectedPartIndices && props.selectedPartIndices.length === 1;
 
-  // Handle background click (deselect)
-  const handlePointerDown = (e: React.PointerEvent) => {
-      pointerStartRef.current = { x: e.clientX, y: e.clientY };
-      isDraggingRef.current = false;
-  };
-
-  const handlePointerUp = (e: React.PointerEvent) => {
-      const dx = Math.abs(e.clientX - pointerStartRef.current.x);
-      const dy = Math.abs(e.clientY - pointerStartRef.current.y);
-      
-      if (dx > 5 || dy > 5) {
-          isDraggingRef.current = true;
-      } else {
-          isDraggingRef.current = false;
-          if (isBuilderMode && onPartClick) {
-              onPartClick(-1, false);
-          }
-      }
+  // Single View Camera Logic
+  const SingleCameraSetup = ({ type }: { type: ViewType }) => {
+      const ctrlRef = useRef<CameraControls>(null);
+      useEffect(() => {
+        if (!ctrlRef.current) return;
+        const transition = true;
+        switch (type) {
+            case 'FRONT': 
+                ctrlRef.current.setLookAt(0, -20, 0, 0, 0, 0, transition); 
+                break;
+            case 'TOP': 
+                ctrlRef.current.setLookAt(0, 0, 20, 0, 0, 0, transition); 
+                break;
+            case 'LEFT': 
+                ctrlRef.current.setLookAt(-20, 0, 0, 0, 0, 0, transition); 
+                break;
+            case 'ISO': 
+            default: 
+                ctrlRef.current.setLookAt(12, -12, 10, 0, 0, 0, transition); 
+                break;
+        }
+      }, [type]);
+      return <CameraControls ref={ctrlRef} makeDefault minDistance={1} maxDistance={200} />;
   };
 
   return (
-    <div 
-        className="w-full h-full bg-slate-50 relative" 
-        onPointerDown={handlePointerDown}
-        onPointerUp={handlePointerUp}
-    >
-      
-      <Canvas shadows camera={{ fov: 45 }}>
-        <fog attach="fog" args={['#f8fafc', 20, 60]} />
-        
-        <CameraManager viewType={viewType} />
-        
-        <ambientLight intensity={0.6} />
-        <directionalLight 
-            position={[10, 20, 10]} 
-            intensity={1.2} 
-            castShadow 
-            shadow-mapSize={[1024, 1024]} 
-        />
-        <Environment preset="city" />
+    <div ref={containerRef} className="w-full h-full bg-slate-50 relative">
+      <Canvas 
+         className="absolute inset-0 block"
+         eventSource={containerRef}
+         shadows
+         camera={{ position: [12, -12, 10], fov: 45, up: [0, 0, 1] }}
+      >
+        {!isMultiView ? (
+            /* STANDARD SINGLE VIEW MODE */
+            <>
+                <PerspectiveCamera makeDefault position={[12, -12, 10]} fov={45} up={[0,0,1]} />
+                <SingleCameraSetup type={props.viewType} />
+                <SceneContent {...props} transformMode={transformMode} />
+            </>
+        ) : (
+            /* MULTI-VIEW MODE */
+            <>
+                <View track={mainViewRef}>
+                    <CameraControls ref={isoControls} makeDefault minDistance={1} maxDistance={200} />
+                    <PerspectiveCamera makeDefault position={[12, -12, 10]} fov={45} up={[0,0,1]} />
+                    <SceneContent {...props} transformMode={transformMode} />
+                </View>
 
-        {/* 
-            Rotate everything -90deg around X axis.
-            Mapping:
-            App X (Red) -> World X (Right)
-            App Y (Green) -> World -Z (Depth/Back)
-            App Z (Blue) -> World Y (Up)
-            
-            This achieves "Z-Axis Perpendicular to Bottom (Grid)"
-        */}
-        <group rotation={[-Math.PI / 2, 0, 0]}>
-            <CoordinateAxes />
-            <ShapeRenderer 
-                shape={activeShape} 
-                selectedPartIndices={selectedPartIndices}
-                onPartClick={onPartClick}
-                transformMode={transformMode}
-                onPartUpdate={onPartUpdate}
-            />
-        </group>
+                <View track={topViewRef}>
+                    <CameraControls ref={topControls} makeDefault minZoom={10} maxZoom={200} />
+                    <OrthographicCamera makeDefault position={[0, 0, 20]} zoom={30} up={[0, 1, 0]} /> 
+                    <SceneContent {...props} transformMode={transformMode} />
+                </View>
 
-        {/* Grid is on World XZ plane (Y=0). Matches the visual "Bottom". */}
-        <Grid 
-            position={[0, -0.01, 0]} 
-            args={[40, 40]} 
-            cellColor="#cbd5e1" 
-            sectionColor="#94a3b8" 
-            fadeDistance={40} 
-            cellSize={1} 
-            sectionSize={5}
-        />
-        
-        <mesh position={[0, -0.02, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-          <planeGeometry args={[100, 100]} />
-          <shadowMaterial opacity={0.2} />
-        </mesh>
+                <View track={frontViewRef}>
+                    <CameraControls ref={frontControls} makeDefault minZoom={10} maxZoom={200} />
+                    <OrthographicCamera makeDefault position={[0, -20, 0]} zoom={30} up={[0, 0, 1]} />
+                    <SceneContent {...props} transformMode={transformMode} />
+                </View>
 
+                <View track={leftViewRef}>
+                    <CameraControls ref={leftControls} makeDefault minZoom={10} maxZoom={200} />
+                    <OrthographicCamera makeDefault position={[-20, 0, 0]} zoom={30} up={[0, 0, 1]} />
+                    <SceneContent {...props} transformMode={transformMode} />
+                </View>
+
+                <CameraSync controls={{ 
+                    'ISO': isoControls, 
+                    'TOP': topControls, 
+                    'FRONT': frontControls, 
+                    'LEFT': leftControls 
+                }} />
+            </>
+        )}
       </Canvas>
-      
-      {/* Overlay info */}
-      <div className="absolute top-4 right-4 pointer-events-none z-10">
-        <div className="bg-white/80 backdrop-blur border border-slate-200 p-3 rounded-lg shadow-sm text-right">
-            <h3 className="text-sm font-bold text-slate-700">当前视角</h3>
-            <p className="text-xs text-slate-500 font-mono mb-2">{getViewName(viewType)}</p>
-            {isBuilderMode && (
-              <div className="mt-2 border-t border-slate-200 pt-2 text-xs text-blue-600">
-                <p>1. 点击图形选中 (Ctrl+单击多选)</p>
-                <p>2. 拖拽轴线可直接操作</p>
-                <p>3. 蓝色轴为Z轴(高度)</p>
-              </div>
-            )}
-        </div>
-      </div>
 
-      {/* Builder Mode Transform Tools */}
+      {/* HTML Layout for MultiView */}
+      {isMultiView && (
+          <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 pointer-events-none">
+              <div ref={topViewRef} className="border-r border-b border-slate-300 relative bg-transparent">
+                  <div className="absolute top-2 left-2 text-xs font-bold text-slate-500 bg-white/80 px-2 py-1 rounded">俯视图 (Top)</div>
+              </div>
+              <div ref={mainViewRef} className="border-b border-slate-300 relative bg-transparent">
+                  <div className="absolute top-2 right-2 text-xs font-bold text-slate-500 bg-white/80 px-2 py-1 rounded">等轴测 (ISO)</div>
+              </div>
+              <div ref={frontViewRef} className="border-r border-slate-300 relative bg-transparent">
+                   <div className="absolute top-2 left-2 text-xs font-bold text-slate-500 bg-white/80 px-2 py-1 rounded">主视图 (Front)</div>
+              </div>
+              <div ref={leftViewRef} className="relative bg-transparent">
+                   <div className="absolute top-2 left-2 text-xs font-bold text-slate-500 bg-white/80 px-2 py-1 rounded">左视图 (Left)</div>
+              </div>
+          </div>
+      )}
+      
+      {/* Overlay Info (Single View) */}
+      {!isMultiView && (
+        <div className="absolute top-4 right-4 pointer-events-none z-10">
+            <div className="bg-white/80 backdrop-blur border border-slate-200 p-3 rounded-lg shadow-sm text-right">
+                <h3 className="text-sm font-bold text-slate-700">当前视角</h3>
+                <p className="text-xs text-slate-500 font-mono mb-2">
+                    {props.viewType === 'ISO' && '等轴测投影 (Isometric)'}
+                    {props.viewType === 'FRONT' && '主视图 (Front)'}
+                    {props.viewType === 'TOP' && '俯视图 (Top)'}
+                    {props.viewType === 'LEFT' && '左视图 (Left)'}
+                </p>
+                {isBuilderMode && (
+                <div className="mt-2 border-t border-slate-200 pt-2 text-xs text-blue-600">
+                    <p>1. 点击图形选中 (Ctrl+单击多选)</p>
+                    <p>2. 蓝色轴线(Z)控制高度</p>
+                </div>
+                )}
+            </div>
+        </div>
+      )}
+
+      {/* Transform Tools */}
       {isBuilderMode && isSingleSelection && (
         <div 
             className="absolute top-4 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-slate-200 p-1 rounded-lg shadow-sm flex gap-1 z-20" 
