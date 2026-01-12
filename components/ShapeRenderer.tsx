@@ -1,6 +1,6 @@
 import React, { useRef, useMemo } from 'react';
-import { GeometryPart, PrimitiveType, ShapeDefinition } from '../types';
-import { TransformControls } from '@react-three/drei';
+import { GeometryPart, PrimitiveType, ShapeDefinition, EdgeMode } from '../types';
+import { TransformControls, Edges } from '@react-three/drei';
 import * as THREE from 'three';
 
 // Define the modes for transformation
@@ -12,7 +12,8 @@ const PartRenderer: React.FC<{
   onClick?: (e: any) => void;
   transformMode?: TransformMode;
   onTransformEnd?: (updatedPart: GeometryPart) => void;
-}> = ({ part, isSelected, onClick, transformMode = 'translate', onTransformEnd }) => {
+  edgeMode?: EdgeMode;
+}> = ({ part, isSelected, onClick, transformMode = 'translate', onTransformEnd, edgeMode = 'NONE' }) => {
   const { type, position, rotation, scale, color, segments } = part;
   const meshRef = useRef<THREE.Mesh>(null);
   
@@ -72,29 +73,16 @@ const PartRenderer: React.FC<{
     roughness: 0.5,
     metalness: 0.1,
     emissive: isSelected ? "#555555" : "#000000",
-    emissiveIntensity: isSelected ? 0.3 : 0
+    emissiveIntensity: isSelected ? 0.3 : 0,
+    polygonOffset: true,
+    polygonOffsetFactor: 1, // Push mesh back slightly so edges don't z-fight
+    polygonOffsetUnits: 1
   };
 
   const handlePointerDown = (e: any) => {
      if (onClick) {
          e.stopPropagation();
      }
-  };
-
-  const renderEdges = () => {
-     // Edges helper also needs Z-up alignment if it's based on primitive
-     if (!isSelected && type !== PrimitiveType.BOX && type !== PrimitiveType.PRISM && type !== PrimitiveType.WEDGE && type !== PrimitiveType.PYRAMID) return null;
-     
-     // For flat shading primitives, show edges
-     if (geometry) {
-         return (
-            <lineSegments>
-                <edgesGeometry args={[geometry]} />
-                <lineBasicMaterial color={isSelected ? "#fbbf24" : "black"} linewidth={2} />
-            </lineSegments>
-        );
-     }
-     return null;
   };
 
   // Determine if we should use flat shading (low poly)
@@ -121,11 +109,26 @@ const PartRenderer: React.FC<{
     <>
       <mesh {...meshProps} geometry={geometry}>
         <meshStandardMaterial {...materialProps} flatShading={isFlat} />
-        {renderEdges()}
+        
+        {/* Render Visible Edges (Contour/Hard Edges) */}
+        {(edgeMode === 'VISIBLE' || edgeMode === 'HIDDEN_VISIBLE') && (
+            <Edges threshold={15}>
+                <lineBasicMaterial color="#1e293b" linewidth={2} />
+            </Edges>
+        )}
+
+        {/* Render Hidden Edges (Dashed/Lighter) */}
+        {edgeMode === 'HIDDEN_VISIBLE' && (
+            <Edges threshold={15}>
+                 {/* GreaterDepth makes it render only when BEHIND the geometry */}
+                <lineBasicMaterial color="#94a3b8" depthFunc={THREE.GreaterDepth} transparent opacity={0.5} />
+            </Edges>
+        )}
+
         {isSelected && type !== PrimitiveType.CUSTOM && (
           <mesh>
              {/* Selection Highlight Box - we use a slightly larger version of the same geometry */}
-             <meshBasicMaterial color="#fbbf24" wireframe transparent opacity={0.5} />
+             <meshBasicMaterial color="#fbbf24" wireframe transparent opacity={0.5} depthTest={false} />
           </mesh>
         )}
       </mesh>
@@ -159,6 +162,7 @@ interface ShapeRendererProps {
   onPartClick?: (index: number, multiSelect: boolean) => void;
   transformMode?: TransformMode;
   onPartUpdate?: (index: number, part: GeometryPart) => void;
+  edgeMode?: EdgeMode;
 }
 
 const ShapeRenderer: React.FC<ShapeRendererProps> = ({ 
@@ -166,7 +170,8 @@ const ShapeRenderer: React.FC<ShapeRendererProps> = ({
   selectedPartIndices = [], 
   onPartClick, 
   transformMode, 
-  onPartUpdate 
+  onPartUpdate,
+  edgeMode = 'NONE'
 }) => {
   return (
     <group>
@@ -183,6 +188,7 @@ const ShapeRenderer: React.FC<ShapeRendererProps> = ({
                     const isMulti = e.shiftKey || e.ctrlKey || e.metaKey;
                     onPartClick(index, isMulti); 
                 } : undefined}
+                edgeMode={edgeMode}
             />
           );
       })}

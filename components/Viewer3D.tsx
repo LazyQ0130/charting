@@ -2,8 +2,8 @@ import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { CameraControls, Grid, Environment, Text, View, PerspectiveCamera, OrthographicCamera } from '@react-three/drei';
 import ShapeRenderer, { TransformMode } from './ShapeRenderer';
-import { GeometryPart, ShapeDefinition, ViewType } from '../types';
-import { Move, RotateCw, Maximize } from 'lucide-react';
+import { GeometryPart, ShapeDefinition, ViewType, EdgeMode } from '../types';
+import { Move, RotateCw, Maximize, BoxSelect, ScanLine, Cuboid, Scaling } from 'lucide-react';
 import * as THREE from 'three';
 
 interface Viewer3DProps {
@@ -56,7 +56,7 @@ const CoordinateAxes = () => {
     );
 };
 
-const SceneContent: React.FC<Viewer3DProps & { transformMode: TransformMode }> = (props) => {
+const SceneContent: React.FC<Viewer3DProps & { transformMode: TransformMode, edgeMode: EdgeMode }> = (props) => {
     return (
         <>
             <ambientLight intensity={0.7} />
@@ -76,6 +76,7 @@ const SceneContent: React.FC<Viewer3DProps & { transformMode: TransformMode }> =
                 onPartClick={props.onPartClick}
                 transformMode={props.transformMode}
                 onPartUpdate={props.onPartUpdate}
+                edgeMode={props.edgeMode}
             />
 
             {/* Grid on XY plane (Z=0) */}
@@ -164,9 +165,11 @@ const CameraSync = ({ controls }: { controls: Record<string, React.RefObject<Cam
 
 const Viewer3D: React.FC<Viewer3DProps> = (props) => {
   const [transformMode, setTransformMode] = useState<TransformMode>('translate');
+  const [edgeMode, setEdgeMode] = useState<EdgeMode>('NONE');
   
   // Refs
   const containerRef = useRef<HTMLDivElement>(null);
+  const singleViewRef = useRef<HTMLDivElement>(null);
   const mainViewRef = useRef<HTMLDivElement>(null);
   const topViewRef = useRef<HTMLDivElement>(null);
   const frontViewRef = useRef<HTMLDivElement>(null);
@@ -185,6 +188,8 @@ const Viewer3D: React.FC<Viewer3DProps> = (props) => {
   // Single View Camera Logic
   const SingleCameraSetup = ({ type }: { type: ViewType }) => {
       const ctrlRef = useRef<CameraControls>(null);
+      
+      // Reset view when type changes
       useEffect(() => {
         if (!ctrlRef.current) return;
         const transition = true;
@@ -204,11 +209,39 @@ const Viewer3D: React.FC<Viewer3DProps> = (props) => {
                 break;
         }
       }, [type]);
+      
       return <CameraControls ref={ctrlRef} makeDefault minDistance={1} maxDistance={200} />;
   };
 
+  const cycleEdgeMode = () => {
+      if (edgeMode === 'NONE') setEdgeMode('VISIBLE');
+      else if (edgeMode === 'VISIBLE') setEdgeMode('HIDDEN_VISIBLE');
+      else setEdgeMode('NONE');
+  };
+
+  // Keyboard Shortcuts
+  useEffect(() => {
+    if (!isBuilderMode) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      switch(e.key.toLowerCase()) {
+        case 't': setTransformMode('translate'); break;
+        case 'r': setTransformMode('rotate'); break;
+        case 's': setTransformMode('scale'); break;
+        case 'escape': 
+          if (props.onPartClick) props.onPartClick(-1, false);
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isBuilderMode, props.onPartClick]);
+
   return (
-    <div ref={containerRef} className="w-full h-full bg-slate-50 relative">
+    <div ref={containerRef} className="w-full h-full bg-slate-50 relative touch-none">
       <Canvas 
          className="absolute inset-0 block"
          eventSource={containerRef}
@@ -217,36 +250,36 @@ const Viewer3D: React.FC<Viewer3DProps> = (props) => {
       >
         {!isMultiView ? (
             /* STANDARD SINGLE VIEW MODE */
-            <>
+            <View track={singleViewRef}>
                 <PerspectiveCamera makeDefault position={[12, -12, 10]} fov={45} up={[0,0,1]} />
                 <SingleCameraSetup type={props.viewType} />
-                <SceneContent {...props} transformMode={transformMode} />
-            </>
+                <SceneContent {...props} transformMode={transformMode} edgeMode={edgeMode} />
+            </View>
         ) : (
             /* MULTI-VIEW MODE */
             <>
                 <View track={mainViewRef}>
                     <CameraControls ref={isoControls} makeDefault minDistance={1} maxDistance={200} />
                     <PerspectiveCamera makeDefault position={[12, -12, 10]} fov={45} up={[0,0,1]} />
-                    <SceneContent {...props} transformMode={transformMode} />
+                    <SceneContent {...props} transformMode={transformMode} edgeMode={edgeMode} />
                 </View>
 
                 <View track={topViewRef}>
                     <CameraControls ref={topControls} makeDefault minZoom={10} maxZoom={200} />
                     <OrthographicCamera makeDefault position={[0, 0, 20]} zoom={30} up={[0, 1, 0]} /> 
-                    <SceneContent {...props} transformMode={transformMode} />
+                    <SceneContent {...props} transformMode={transformMode} edgeMode={edgeMode} />
                 </View>
 
                 <View track={frontViewRef}>
                     <CameraControls ref={frontControls} makeDefault minZoom={10} maxZoom={200} />
                     <OrthographicCamera makeDefault position={[0, -20, 0]} zoom={30} up={[0, 0, 1]} />
-                    <SceneContent {...props} transformMode={transformMode} />
+                    <SceneContent {...props} transformMode={transformMode} edgeMode={edgeMode} />
                 </View>
 
                 <View track={leftViewRef}>
                     <CameraControls ref={leftControls} makeDefault minZoom={10} maxZoom={200} />
                     <OrthographicCamera makeDefault position={[-20, 0, 0]} zoom={30} up={[0, 0, 1]} />
-                    <SceneContent {...props} transformMode={transformMode} />
+                    <SceneContent {...props} transformMode={transformMode} edgeMode={edgeMode} />
                 </View>
 
                 <CameraSync controls={{ 
@@ -259,23 +292,44 @@ const Viewer3D: React.FC<Viewer3DProps> = (props) => {
         )}
       </Canvas>
 
-      {/* HTML Layout for MultiView */}
-      {isMultiView && (
+      {/* HTML Layout for Views */}
+      {isMultiView ? (
           <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 pointer-events-none">
-              <div ref={topViewRef} className="border-r border-b border-slate-300 relative bg-transparent">
+              <div ref={topViewRef} className="border-r border-b border-slate-300 relative bg-transparent pointer-events-auto">
                   <div className="absolute top-2 left-2 text-xs font-bold text-slate-500 bg-white/80 px-2 py-1 rounded">俯视图 (Top)</div>
               </div>
-              <div ref={mainViewRef} className="border-b border-slate-300 relative bg-transparent">
+              <div ref={mainViewRef} className="border-b border-slate-300 relative bg-transparent pointer-events-auto">
                   <div className="absolute top-2 right-2 text-xs font-bold text-slate-500 bg-white/80 px-2 py-1 rounded">等轴测 (ISO)</div>
               </div>
-              <div ref={frontViewRef} className="border-r border-slate-300 relative bg-transparent">
+              <div ref={frontViewRef} className="border-r border-slate-300 relative bg-transparent pointer-events-auto">
                    <div className="absolute top-2 left-2 text-xs font-bold text-slate-500 bg-white/80 px-2 py-1 rounded">主视图 (Front)</div>
               </div>
-              <div ref={leftViewRef} className="relative bg-transparent">
+              <div ref={leftViewRef} className="relative bg-transparent pointer-events-auto">
                    <div className="absolute top-2 left-2 text-xs font-bold text-slate-500 bg-white/80 px-2 py-1 rounded">左视图 (Left)</div>
               </div>
           </div>
+      ) : (
+          /* Single View Tracking Element */
+          <div ref={singleViewRef} className="absolute inset-0" />
       )}
+      
+      {/* View Style Control */}
+      <div className="absolute top-4 left-4 z-20 pointer-events-auto">
+          <button 
+            onClick={cycleEdgeMode}
+            className="flex items-center gap-2 bg-white/90 backdrop-blur-sm border border-slate-200 p-2 rounded-lg shadow-sm hover:bg-slate-50 transition-colors"
+            title="切换线框模式 (Toggle Wireframe Modes)"
+          >
+             {edgeMode === 'NONE' && <Cuboid className="w-5 h-5 text-slate-500" />}
+             {edgeMode === 'VISIBLE' && <BoxSelect className="w-5 h-5 text-blue-600" />}
+             {edgeMode === 'HIDDEN_VISIBLE' && <ScanLine className="w-5 h-5 text-blue-600" />}
+             <span className="text-xs font-medium text-slate-700 hidden sm:inline w-20 text-center">
+                 {edgeMode === 'NONE' && '标准视图'}
+                 {edgeMode === 'VISIBLE' && '可见轮廓'}
+                 {edgeMode === 'HIDDEN_VISIBLE' && '透视轮廓'}
+             </span>
+          </button>
+      </div>
       
       {/* Overlay Info (Single View) */}
       {!isMultiView && (
@@ -292,6 +346,10 @@ const Viewer3D: React.FC<Viewer3DProps> = (props) => {
                 <div className="mt-2 border-t border-slate-200 pt-2 text-xs text-blue-600">
                     <p>1. 点击图形选中 (Ctrl+单击多选)</p>
                     <p>2. 蓝色轴线(Z)控制高度</p>
+                    <p className="mt-1 font-mono opacity-80">
+                        快捷键: T=移动 R=旋转 S=缩放<br/>
+                        ESC=取消选择
+                    </p>
                 </div>
                 )}
             </div>
@@ -307,23 +365,23 @@ const Viewer3D: React.FC<Viewer3DProps> = (props) => {
            <button 
              onClick={() => setTransformMode('translate')}
              className={`p-2 rounded ${transformMode === 'translate' ? 'bg-blue-100 text-blue-600' : 'text-slate-600 hover:bg-slate-100'}`}
-             title="移动 (Translate)"
+             title="移动 (Translate) [T]"
            >
              <Move className="w-4 h-4"/>
            </button>
            <button 
              onClick={() => setTransformMode('rotate')}
              className={`p-2 rounded ${transformMode === 'rotate' ? 'bg-blue-100 text-blue-600' : 'text-slate-600 hover:bg-slate-100'}`}
-             title="旋转 (Rotate)"
+             title="旋转 (Rotate) [R]"
            >
              <RotateCw className="w-4 h-4"/>
            </button>
            <button 
              onClick={() => setTransformMode('scale')}
              className={`p-2 rounded ${transformMode === 'scale' ? 'bg-blue-100 text-blue-600' : 'text-slate-600 hover:bg-slate-100'}`}
-             title="缩放 (Scale)"
+             title="缩放 (Scale) [S]"
            >
-             <Maximize className="w-4 h-4"/>
+             <Scaling className="w-4 h-4"/>
            </button>
         </div>
       )}

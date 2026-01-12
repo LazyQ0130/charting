@@ -1,3 +1,4 @@
+
 export enum PrimitiveType {
   BOX = 'BOX',
   CYLINDER = 'CYLINDER', // High poly cylinder
@@ -33,3 +34,5 @@ export interface Category {
 }
 
 export type ViewType = 'ISO' | 'FRONT' | 'TOP' | 'LEFT' | 'ALL';
+
+export type EdgeMode = 'NONE' | 'VISIBLE' | 'HIDDEN_VISIBLE';
