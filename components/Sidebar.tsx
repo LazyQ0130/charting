@@ -297,19 +297,34 @@ const Sidebar: React.FC<SidebarProps> = ({
 
                        {/* Scale */}
                        <div>
-                          <label className="block text-slate-500 mb-1">尺寸 (W, H, D)</label>
+                          <div className="flex justify-between items-baseline mb-1">
+                            <label className="block text-slate-500">尺寸 (缩放)</label>
+                            <span className="text-[10px] text-slate-400">
+                                <span className="text-red-500 mr-1">X长</span> 
+                                <span className="text-green-500 mr-1">Y宽</span> 
+                                <span className="text-blue-500">Z高</span>
+                            </span>
+                          </div>
                           <div className="grid grid-cols-3 gap-1">
-                              {[0, 1, 2].map(axis => (
-                                  <input 
-                                    key={`scale-${axis}`}
-                                    type="number" 
-                                    step="0.5"
-                                    min="0.1"
-                                    value={primaryPart.scale[axis as 0|1|2]}
-                                    onChange={(e) => handleValueChange('scale', axis as 0|1|2, e.target.value)}
-                                    className="w-full px-1 py-1 border rounded text-center focus:border-blue-500 outline-none"
-                                  />
-                              ))}
+                              {[0, 1, 2].map(axis => {
+                                  let label = axis === 0 ? 'W' : axis === 1 ? 'D' : 'H';
+                                  let colorClass = axis === 0 ? 'text-red-400' : axis === 1 ? 'text-green-500' : 'text-blue-500';
+                                  return (
+                                  <div key={`scale-${axis}`} className="relative group">
+                                      <span className={`absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold pointer-events-none ${colorClass}`}>
+                                          {label}
+                                      </span>
+                                      <input 
+                                        type="number" 
+                                        step="0.5"
+                                        min="0.1"
+                                        value={primaryPart.scale[axis as 0|1|2]}
+                                        onChange={(e) => handleValueChange('scale', axis as 0|1|2, e.target.value)}
+                                        className="w-full pl-5 pr-1 py-1 border rounded text-right focus:border-blue-500 outline-none text-xs"
+                                        title={axis === 0 ? 'X轴 (宽度 Width)' : axis === 1 ? 'Y轴 (深度 Depth)' : 'Z轴 (高度 Height)'}
+                                      />
+                                  </div>
+                              )})}
                           </div>
                       </div>
                       
