@@ -1,4 +1,5 @@
 import React, { useRef, useMemo } from 'react';
+import { ThreeEvent } from '@react-three/fiber';
 import { GeometryPart, PrimitiveType, ShapeDefinition, EdgeMode } from '../types';
 import { TransformControls, Edges } from '@react-three/drei';
 import * as THREE from 'three';
@@ -9,7 +10,7 @@ export type TransformMode = 'translate' | 'rotate' | 'scale';
 const PartRenderer: React.FC<{ 
   part: GeometryPart; 
   isSelected?: boolean;
-  onClick?: (e: any) => void;
+  onClick?: (e: ThreeEvent<MouseEvent>) => void;
   transformMode?: TransformMode;
   onTransformEnd?: (updatedPart: GeometryPart) => void;
   edgeMode?: EdgeMode;
@@ -79,7 +80,7 @@ const PartRenderer: React.FC<{
     polygonOffsetUnits: 1
   };
 
-  const handlePointerDown = (e: any) => {
+  const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
      if (onClick) {
          e.stopPropagation();
      }
@@ -94,7 +95,7 @@ const PartRenderer: React.FC<{
     position: position,
     rotation: rotation,
     scale: scale, 
-    onClick: onClick ? (e: any) => {
+    onClick: onClick ? (e: ThreeEvent<MouseEvent>) => {
         e.stopPropagation();
         onClick(e);
     } : undefined,

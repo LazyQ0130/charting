@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Canvas, ThreeEvent } from '@react-three/fiber';
 import { CameraControls, Grid, Environment, Text, View, PerspectiveCamera, OrthographicCamera } from '@react-three/drei';
 import ShapeRenderer, { TransformMode } from './ShapeRenderer';
 import { GeometryPart, ShapeDefinition, ViewType, EdgeMode } from '../types';

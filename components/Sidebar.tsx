@@ -101,6 +101,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                       <br/>1. <strong>点击</strong>物体选中，拖拽轴移动。
                       <br/>2. 按住 <strong>Shift/Ctrl + 点击</strong> 进行多选。
                       <br/>3. 蓝色轴为Z轴(高度)。
+                      <br/>4. 差集: <strong>先选中</strong>被减物，<strong>后选中</strong>减去的物体。
                   </p>
                   
                   {/* Undo/Redo Toolbar */}

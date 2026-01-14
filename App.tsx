@@ -340,8 +340,11 @@ const App: React.FC = () => {
       if (selectedPartIndices.length < 2) return;
       pushToHistory();
 
-      const sortedIndices = [...selectedPartIndices].sort((a,b) => a - b);
-      const brushes = sortedIndices.map(idx => createBrushFromPart(customParts[idx]));
+      // Use selectedPartIndices DIRECTLY to respect selection order.
+      // This ensures that for Subtraction: First Selected MINUS Second Selected.
+      const indicesToUse = [...selectedPartIndices];
+      
+      const brushes = indicesToUse.map(idx => createBrushFromPart(customParts[idx]));
       
       const evaluator = new Evaluator();
       
